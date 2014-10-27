@@ -46,9 +46,6 @@ file_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
         error_setg(errp, "mem_path property not set");
         return;
     }
-#ifndef CONFIG_LINUX
-    error_setg(errp, "-mem-path not supported on this host");
-#else
     if (!memory_region_size(&backend->mr)) {
         backend->force_prealloc = mem_prealloc;
         memory_region_init_ram_from_file(&backend->mr, OBJECT(backend),
@@ -56,7 +53,6 @@ file_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
                                  backend->size, fb->share,
                                  fb->mem_path, errp);
     }
-#endif
 }
 
 static void

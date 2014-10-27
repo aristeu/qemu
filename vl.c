@@ -3160,12 +3160,20 @@ int main(int argc, char **argv, char **envp)
                 }
                 break;
 #endif
+#ifdef __linux__
             case QEMU_OPTION_mempath:
                 mem_path = optarg;
                 break;
             case QEMU_OPTION_mem_prealloc:
                 mem_prealloc = 1;
                 break;
+#else
+            case QEMU_OPTION_mempath:
+            case QEMU_OPTION_mem_prealloc:
+                fprintf(stderr, "-mem-path and -mem-prealloc not supported in "
+                        "this host\n");
+                exit(EXIT_FAILURE);
+#endif
             case QEMU_OPTION_d:
                 log_mask = optarg;
                 break;
