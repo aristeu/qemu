@@ -247,42 +247,47 @@ void set_numa_modes(void)
     }
 }
 
-static void allocate_system_memory_nonnuma(MemoryRegion *mr, Object *owner,
-                                           const char *name,
-                                           uint64_t ram_size)
+static void allocate_system_memory(MemoryRegion **mr, const char *name,
+                                   uint64_t ram_size)
 {
-    if (mem_path) {
-        Error *err = NULL;
-        memory_region_init_ram_from_file(mr, owner, name, ram_size, false,
-                                         mem_path, &err);
+    Error *err = NULL;
+    MachineClass *mc = MACHINE_GET_CLASS(current_machine);
 
-        /* Legacy behavior: if allocation failed, fall back to
-         * regular RAM allocation.
-         */
-        if (err) {
-            qerror_report_err(err);
-            error_free(err);
-            memory_region_init_ram(mr, owner, name, ram_size, &error_abort);
+    if (mem_path) {
+        HostMemoryBackendFile *backend;
+
+        backend  = MEMORY_BACKEND(object_new(TYPE_MEMORY_BACKEND_FILE));
+        object_property_set_str(OBJECT(backend), mem_type, "mem_path", &err);
+        if (!err) {
+            mc->system_memory = backend;
         }
-    } else {
-        memory_region_init_ram(mr, owner, name, ram_size, &error_abort);
+    }
+
+    /* Legacy behavior: if -mem-path failed, fall back to memory allocation */
+    if (!mem_path || !mc->system_memory) {
+        if (err) {
+            error_free(err);
+            err = NULL;
+        }
+        backend = MEMORY_BACKEND_RAM(object_new(TYPE_MEMORY_BACKEND_RAM)); 
+        object_property_set_int(OBJECT(backend), ram_size, "size", &err);
+        mc->system_memory = backend;
+    }
+
+    if (err) {
+        qerror_report_err(err);
+        exit(1);
     }
     vmstate_register_ram_global(mr);
 }
 
-void memory_region_allocate_system_memory(MemoryRegion *mr, Object *owner,
-                                          const char *name,
-                                          uint64_t ram_size)
+static void allocate_system_memory_numa(MemoryRegion *mr, const char *name,
+                                        uint64_t ram_size)
 {
     uint64_t addr = 0;
     int i;
 
-    if (nb_numa_nodes == 0 || !have_memdevs) {
-        allocate_system_memory_nonnuma(mr, owner, name, ram_size);
-        return;
-    }
-
-    memory_region_init(mr, owner, name, ram_size);
+    memory_region_init(mr, NULL, name, ram_size);
     for (i = 0; i < MAX_NODES; i++) {
         Error *local_err = NULL;
         uint64_t size = numa_info[i].node_mem;
@@ -307,6 +312,30 @@ void memory_region_allocate_system_memory(MemoryRegion *mr, Object *owner,
         memory_region_add_subregion(mr, addr, seg);
         vmstate_register_ram_global(seg);
         addr += size;
+    }
+}
+
+void memory_region_allocate_system_memory(MemoryRegion **mr, char *name)
+{
+    MachineClass *mc = MACHINE_GET_CLASS(current_machine);
+    HostMemoryBackend *backend = mc->system_memory;
+    Error *err;
+
+    if (backend) {
+        *mr = host_memory_backend_get_memory(backend, &err);
+        if (err) {
+            qerror_report_err(err);
+            exit(1);
+        }
+        return;
+    }
+
+    if (nb_numa_nodes == 0 || !have_memdevs) {
+        allocate_system_memory(mr, name,  mc->ram_size);
+    } else {
+	*mr = g_malloc(sizeof(MemoryRegion));
+        object_initialize(*mr, sizeof(**mr), TYPE_MEMORY_REGION);
+        allocate_system_memory_numa(mr, name, mc->ram_size);
     }
 }
 

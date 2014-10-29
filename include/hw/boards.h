@@ -8,6 +8,7 @@
 #include "sysemu/accel.h"
 #include "hw/qdev.h"
 #include "qom/object.h"
+#include "sysemu/hostmem.h"
 
 
 typedef void QEMUMachineInitFunc(MachineState *ms);
@@ -126,6 +127,7 @@ struct MachineState {
     char *firmware;
     bool iommu;
 
+    HostMemoryBackend *system_memory;
     ram_addr_t ram_size;
     ram_addr_t maxram_size;
     uint64_t   ram_slots;

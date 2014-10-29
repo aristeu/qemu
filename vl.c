@@ -526,6 +526,10 @@ static QemuOptsList qemu_mem_opts = {
             .name = "maxmem",
             .type = QEMU_OPT_SIZE,
         },
+        {
+            .name = "memdev",
+            .type = QEMU_OPT_STRING,
+        },
         { /* end of list */ }
     },
 };
@@ -2725,6 +2729,7 @@ int main(int argc, char **argv, char **envp)
     };
     const char *trace_events = NULL;
     const char *trace_file = NULL;
+    const char *memdev_str = NULL;
     const ram_addr_t default_ram_size = (ram_addr_t)DEFAULT_RAM_SIZE *
                                         1024 * 1024;
     ram_addr_t maxram_size = default_ram_size;
@@ -3151,6 +3156,7 @@ int main(int argc, char **argv, char **envp)
                             "'%s' option", slots_str ? "maxmem" : "slots");
                     exit(EXIT_FAILURE);
                 }
+                memdev_str = qemu_opt_get(opts, "memdev");
                 break;
             }
 #ifdef CONFIG_TPM
@@ -4022,6 +4028,19 @@ int main(int argc, char **argv, char **envp)
     if (qemu_opts_foreach(qemu_find_opts("object"),
                           object_create, NULL, 0) != 0) {
         exit(1);
+    }
+
+    if (memdev_str) {
+        Object *o;
+        HostMemoryBackend *m;
+        o = object_resolve_path_type(memdev_str, TYPE_MEMORY_BACKEND, NULL);
+        m = MEMORY_BACKEND(o);
+        if (m->size < ram_size) {
+            fprintf(stderr, "The memory object is smaller (%liMB) than "
+                    "specified memory size (%liMB)\n", m->size, ram_size);
+            exit(EXIT_FAILURE);
+        }
+        current_machine->system_memory = m;
     }
 
     machine_opts = qemu_get_machine_opts();
